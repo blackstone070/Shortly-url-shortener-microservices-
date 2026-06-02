@@ -20,7 +20,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 2. Connect to Redis (Using Docker service name 'redis')
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-redis_client = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
+REDIS_URL = os.getenv("REDIS_URL")
+if REDIS_URL:
+    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+else:
+    redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "redis"), port=6379, decode_responses=True)
 
 # --- BACKGROUND TASK FOR ANALYTICS ---
 async def track_click_metadata(short_code: str, ip: str, user_agent: str):
