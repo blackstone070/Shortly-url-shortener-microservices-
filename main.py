@@ -27,9 +27,9 @@ else:
 # Test Redis connection on startup
 try:
     redis_client.ping()
-    print("✅ Redis connected successfully")
+    print("Redis connected successfully")
 except Exception as e:
-    print(f"❌ Redis connection failed: {e}")
+    print(f" Redis connection failed: {e}")
 
 # --- BACKGROUND TASK FOR ANALYTICS ---
 async def track_click_metadata(short_code: str, ip: str, user_agent: str):
