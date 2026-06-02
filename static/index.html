@@ -47,15 +47,15 @@
                         <p id="topDevice" class="text-xs font-bold text-green-400">---</p>
                     </div>
                     <div class="bg-gray-800/50 p-3 rounded-lg border border-gray-700">
-                        <p class="text-[10px] text-gray-500 uppercase mb-1">Country</p>
-                        <p id="topCountry" class="text-xs font-bold text-blue-400">India</p>
+                        <p class="text-[10px] text-gray-500 uppercase mb-1">Top Country</p>
+                        <p id="topCountry" class="text-xs font-bold text-blue-400">---</p>
                     </div>
                 </div>
 
                 <div>
-                    <p class="text-[10px] text-gray-500 uppercase mb-2 font-bold">Clicks by State (India)</p>
+                    <p class="text-[10px] text-gray-500 uppercase mb-2 font-bold">Clicks by Region</p>
                     <ul id="stateList" class="space-y-1 text-xs text-gray-300 max-h-32 overflow-y-auto pr-2">
-                        </ul>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -82,7 +82,6 @@
 
                 const data = await response.json();
 
-                // Check if the backend actually returned a valid short URL
                 if (data && data.short_url) {
                     document.getElementById('resultBox').classList.remove('hidden');
                     document.getElementById('shortLink').innerText = data.short_url;
@@ -94,7 +93,6 @@
                     fetchClicks(currentShortCode);
                     pollInterval = setInterval(() => fetchClicks(currentShortCode), 3000);
                 } else {
-                    // Handle case where backend responds, but without data (e.g. Encoder down)
                     alert('Backend service error: Unable to generate link. Please ensure the C++ Encoder microservice is running.');
                 }
 
@@ -116,7 +114,7 @@
                 // Update Total Clicks
                 document.getElementById('clickCount').innerText = `${data.total_clicks || 0} Clicks`;
 
-                // Update Devices
+                // Update Top Device
                 const devices = data.analytics?.devices || {};
                 const deviceKeys = Object.keys(devices);
                 const topDevice = deviceKeys.length > 0 
@@ -124,12 +122,19 @@
                     : "---";
                 document.getElementById('topDevice').innerText = topDevice;
 
-                // Update States List
+                // Update Top Country (FIXED - was hardcoded "India")
+                const countries = data.analytics?.countries || {};
+                const countryKeys = Object.keys(countries);
+                const topCountry = countryKeys.length > 0
+                    ? countryKeys.reduce((a, b) => countries[a] > countries[b] ? a : b)
+                    : "---";
+                document.getElementById('topCountry').innerText = topCountry;
+
+                // Update Region List (FIXED - renamed from "States India")
                 const stateList = document.getElementById('stateList');
                 stateList.innerHTML = "";
                 const states = data.analytics?.states || {};
                 
-                // Sort states by click count
                 Object.entries(states)
                     .sort(([,a], [,b]) => b - a)
                     .forEach(([state, count]) => {
