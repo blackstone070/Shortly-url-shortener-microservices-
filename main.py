@@ -1,7 +1,6 @@
 import httpx
 import redis
 import models
-import random
 import os 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
 from fastapi.responses import RedirectResponse
@@ -21,9 +20,16 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # 2. Connect to Redis - supports both Railway (REDIS_URL) and Docker (REDIS_HOST)
 REDIS_URL = os.getenv("REDIS_URL")
 if REDIS_URL:
-    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=5, socket_timeout=5)
 else:
-    redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "redis"), port=6379, decode_responses=True)
+    redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "redis"), port=int(os.getenv("REDIS_PORT", 6379)), decode_responses=True)
+
+# Test Redis connection on startup
+try:
+    redis_client.ping()
+    print("✅ Redis connected successfully")
+except Exception as e:
+    print(f"❌ Redis connection failed: {e}")
 
 # --- BACKGROUND TASK FOR ANALYTICS ---
 async def track_click_metadata(short_code: str, ip: str, user_agent: str):
@@ -31,19 +37,15 @@ async def track_click_metadata(short_code: str, ip: str, user_agent: str):
     device = "Mobile" if ua.is_mobile else "Tablet" if ua.is_tablet else "Desktop"
     redis_client.hincrby(f"stats:{short_code}:devices", device, 1)
 
-    if ip in ["127.0.0.1", "localhost", "::1"] or ip.startswith("172.") or ip.startswith("10."):
-        states = ["Maharashtra", "Delhi", "Karnataka", "Gujarat", "Tamil Nadu"]
-        state = random.choice(states)
-        country = "India"
-    else:
-        try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(f"https://ipinfo.io/{ip}/json")
-                data = res.json()
-                country = data.get("country", "Unknown")
-                state = data.get("region", "Unknown State")
-        except:
-            country, state = "Other", "Other"
+    # Fix 2: Always call ipinfo - never skip based on IP range (Railway uses 10.x.x.x internally)
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"https://ipinfo.io/{ip}/json", timeout=5)
+            data = res.json()
+            country = data.get("country", "Unknown")
+            state = data.get("region", "Unknown State")
+    except:
+        country, state = "Other", "Other"
 
     redis_client.hincrby(f"stats:{short_code}:countries", country, 1)
     redis_client.hincrby(f"stats:{short_code}:states", state, 1)
@@ -119,7 +121,10 @@ async def redirect(short_code: str, request: Request, background_tasks: Backgrou
         cached_url = db_url.original_url
         redis_client.set(short_code, cached_url, ex=3600)
 
-    user_ip = request.client.host
+    # Fix 3: Get real client IP from X-Forwarded-For header (Railway proxy)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    user_ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.client.host
+
     user_agent = request.headers.get("user-agent", "")
     background_tasks.add_task(track_click_metadata, short_code, user_ip, user_agent)
     redis_client.incr(f"clicks:{short_code}:total")
